@@ -421,7 +421,12 @@
     async function load(silent) {
         try {
             const r = await api('catalog');
-            if (r.status !== 'success') throw new Error(r.message || 'โหลดไม่สำเร็จ');
+            if (r.status !== 'success') {
+                // Apps Script รุ่นเก่ายังไม่รู้จักคำสั่ง catalog → ตอบ auth / "ไม่รู้จักคำสั่ง"
+                const old = r.status === 'auth' || /ไม่รู้จักคำสั่ง/.test(r.message || '');
+                const e = new Error(old ? 'OLD_BACKEND' : (r.message || 'โหลดไม่สำเร็จ'));
+                throw e;
+            }
             items = r.items || []; byId = {}; items.forEach(i => byId[i.id] = i);
             loadedAt = Date.now();
             applyBrand(r);
@@ -429,9 +434,13 @@
             syncCart();
             render();
         } catch (e) {
+            console.warn('[ร้าน] โหลดแคตตาล็อกไม่สำเร็จ:', e);
             if (!silent || !items.length) {
-                $('grid').innerHTML = `<div class="state"><b>เชื่อมต่อร้านไม่ได้ชั่วคราว</b>ตรวจอินเทอร์เน็ตแล้วลองใหม่ หรือโทรสั่งกับทีมงาน<br><button class="btn btn-line" onclick="load()">ลองอีกครั้ง</button></div>`;
-                $('live').innerHTML = '<i style="background:#F6B13D"></i><span>ยังดึงสต๊อกล่าสุดไม่ได้</span>';
+                const why = e.message === 'OLD_BACKEND'
+                    ? 'ระบบหลังบ้านยังไม่ได้อัปเดตสำหรับหน้าร้าน (ผู้ดูแล: วาง Code.gs ใหม่ แล้ว Deploy → New version)'
+                    : e instanceof TypeError ? 'เชื่อมต่อเซิร์ฟเวอร์ไม่ได้ ตรวจอินเทอร์เน็ตแล้วลองใหม่' : e.message;
+                $('grid').innerHTML = `<div class="state"><b>ยังโหลดสินค้าไม่ได้</b>${esc(why)}<br><button class="btn btn-line" onclick="load()">ลองอีกครั้ง</button></div>`;
+                $('live').innerHTML = `<i style="background:#F6B13D"></i><span>${e.message === 'OLD_BACKEND' ? 'หลังบ้านยังไม่อัปเดต — ยังดึงสต๊อกไม่ได้' : 'ยังดึงสต๊อกล่าสุดไม่ได้'}</span>`;
             }
         }
     }
